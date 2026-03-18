@@ -51,13 +51,16 @@ pub struct FdTable {
     // TODO: Design the internal structure
     // Hint: use Vec<Option<Arc<dyn File>>>
     //       the index is the fd number, None means the fd is closed or unallocated
+    table: Vec<Option<Arc<dyn File>>>
 }
 
 impl FdTable {
     /// Create an empty fd table
     pub fn new() -> Self {
         // TODO
-        todo!()
+        FdTable {
+            table: vec![],
+        }
     }
 
     /// Allocate a new fd, return the fd number.
@@ -65,25 +68,57 @@ impl FdTable {
     /// Prefers reusing the smallest closed fd number; if no free slot, appends to the end.
     pub fn alloc(&mut self, file: Arc<dyn File>) -> usize {
         // TODO
-        todo!()
+        // Try to reusing the smallest closed fd
+        for (i, f) in self.table.iter_mut().enumerate() {
+            if f.is_none() {
+                *f = Some(file);
+                return i;
+            }
+        }
+        // No free fd
+        self.table.push(Some(file));
+        self.table.len() - 1
     }
 
     /// Get the file object for an fd. Returns None if the fd doesn't exist or is closed.
     pub fn get(&self, fd: usize) -> Option<Arc<dyn File>> {
         // TODO
-        todo!()
+        // len is usize, so there can be a problem to use `len - 1` when len == 0
+        if fd + 1 > self.table.len() {
+            return None;
+        }
+        match &self.table[fd] {
+            None =>  None,
+            Some(f) => Some(Arc::clone(&f))
+        }
     }
 
     /// Close an fd. Returns true on success, false if the fd doesn't exist or is already closed.
     pub fn close(&mut self, fd: usize) -> bool {
         // TODO
-        todo!()
+        // len is usize, so there can be a problem to use `len - 1` when len == 0
+        if fd + 1 > self.table.len() {
+            return false;
+        }
+        match self.table[fd] {
+            None => false,
+            Some(_) => {
+                self.table[fd] = None;
+                true
+            }
+        }
     }
 
     /// Return the number of currently allocated fds (excluding closed ones)
     pub fn count(&self) -> usize {
         // TODO
-        todo!()
+        let mut count = 0;
+        for f in &self.table {
+            if f.is_some() {
+                count += 1;
+            }
+        }
+        count
     }
 }
 
