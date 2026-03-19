@@ -173,7 +173,7 @@ unsafe impl GlobalAlloc for FreeListAllocator {
         let ptr = ptr as *mut FreeBlock;
         // 2. Write FreeBlock { size, next: current list head }
         *ptr = FreeBlock {
-            size: layout.size(),
+            size: size,
             next: self.free_list_head()
         };
         // 3. Update free_list head to ptr
