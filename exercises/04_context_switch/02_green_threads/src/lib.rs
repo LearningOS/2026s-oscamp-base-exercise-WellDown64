@@ -143,7 +143,7 @@ impl Scheduler {
         let aligned_sp = (stack_top - 16) & !0xF;
         let ctx = TaskContext {
             sp: aligned_sp as u64,
-            ra: thread_wrapper as *const() as u64,
+            ra: thread_wrapper as *const () as u64,
             ..Default::default()
         };
         let thread = GreenThread {
@@ -152,7 +152,7 @@ impl Scheduler {
             _stack: Some(stack),
             entry: Some(entry),
         };
-        self.threads.push(thread);  
+        self.threads.push(thread);
     }
 
     /// Run the scheduler until all threads (except the main one) are `Finished`.
@@ -162,11 +162,20 @@ impl Scheduler {
     /// 3. Clear `SCHEDULER` when done.
     pub fn run(&mut self) {
         // todo!("set SCHEDULER to self, loop until threads[1..] all Finished, call schedule_next, then clear SCHEDULER")
-        unsafe { SCHEDULER = self as *mut Scheduler; }
-        while self.threads[1..].iter().any(|t| t.state != ThreadState::Finished) {
-            unsafe { (*SCHEDULER).schedule_next(); }
+        unsafe {
+            SCHEDULER = self as *mut Scheduler;
         }
-        unsafe { SCHEDULER = std::ptr::null_mut(); }
+        while self.threads[1..]
+            .iter()
+            .any(|t| t.state != ThreadState::Finished)
+        {
+            unsafe {
+                (*SCHEDULER).schedule_next();
+            }
+        }
+        unsafe {
+            SCHEDULER = std::ptr::null_mut();
+        }
     }
 
     /// Find the next ready thread (starting from `current + 1` round-robin), mark current as `Ready` (if not `Finished`), mark next as `Running`, set `CURRENT_THREAD_ENTRY` if the next thread has an entry, then switch to it.
@@ -176,18 +185,25 @@ impl Scheduler {
             .chain(0..=self.current)
             .find(|&i| self.threads[i].state == ThreadState::Ready)
             .unwrap_or(self.current);
-        self.threads[self.current].state = if self.threads[self.current].state == ThreadState::Finished {
-            ThreadState::Finished
-        } else {
-            ThreadState::Ready
-        };
-        self.threads[next].state = ThreadState::Running;
-        if let Some(entry) = self.threads[next].entry.take() {
-            unsafe { CURRENT_THREAD_ENTRY = Some(entry); }
+        let old_current = self.current;
+        // Mark old thread as Ready if not Finished
+        if self.threads[old_current].state != ThreadState::Finished {
+            self.threads[old_current].state = ThreadState::Ready;
         }
-        let next_ctx = self.threads[next].ctx.clone();
-        unsafe { switch_context(&mut self.threads[self.current].ctx, &next_ctx); }
+        // Mark new thread as Running
+        self.threads[next].state = ThreadState::Running;
+        // Set entry for the new thread if it has one
+        if let Some(entry) = self.threads[next].entry.take() {
+            unsafe {
+                CURRENT_THREAD_ENTRY = Some(entry);
+            }
+        }
+        // Update current before switching
         self.current = next;
+        let next_ctx = self.threads[next].ctx.clone();
+        unsafe {
+            switch_context(&mut self.threads[old_current].ctx, &next_ctx);
+        }
     }
 }
 
@@ -247,24 +263,24 @@ mod tests {
         EXEC_ORDER.fetch_add(10, Ordering::SeqCst);
     }
 
-    // #[test]
-    // fn test_scheduler_runs_all() {
-    //     let _guard = TEST_LOCK.lock().unwrap();
-    //     EXEC_ORDER.store(0, Ordering::SeqCst);
+    #[test]
+    fn test_scheduler_runs_all() {
+        let _guard = TEST_LOCK.lock().unwrap();
+        EXEC_ORDER.store(0, Ordering::SeqCst);
 
-    //     let mut sched = Scheduler::new();
-    //     sched.spawn(task_a);
-    //     sched.spawn(task_b);
-    //     sched.run();
+        let mut sched = Scheduler::new();
+        sched.spawn(task_a);
+        sched.spawn(task_b);
+        sched.run();
 
-    //     let got = EXEC_ORDER.load(Ordering::SeqCst);
-    //     if got != 122 {
-    //         panic!(
-    //             "EXEC_ORDER: expected 122, got {} (run with --nocapture to see stderr)",
-    //             got
-    //         );
-    //     }
-    // }
+        let got = EXEC_ORDER.load(Ordering::SeqCst);
+        if got != 122 {
+            panic!(
+                "EXEC_ORDER: expected 122, got {} (run with --nocapture to see stderr)",
+                got
+            );
+        }
+    }
 
     static SIMPLE_FLAG: AtomicU32 = AtomicU32::new(0);
 
@@ -284,4 +300,3 @@ mod tests {
         assert_eq!(SIMPLE_FLAG.load(Ordering::SeqCst), 42);
     }
 }
-
